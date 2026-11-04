@@ -76,6 +76,20 @@ python3 scripts/validate_pack.py --pack out/<song name> --namespace minecraft --
 
 No Python environment: assemble it by hand following `templates/`; the rules are in `references/format_spec.md` §A/§D and `templates/README.md`.
 
+## Melody preservation and vanilla sound effects
+
+- `midi_to_song.py` defaults to `--pitch-policy preserve`: if a note is outside its assigned
+  instrument range, try another target-version-compatible vanilla note-block instrument that
+  covers the exact MIDI pitch before octave folding. Record any rerouting/folding in the report.
+  `--pitch-policy fold` restores the legacy octave-folding-first behavior.
+- `song.json` may include a top-level `effects` array for non-pitched vanilla sound events. These
+  are separate from MIDI note tracks and are played with ordinary `/playsound` commands. No
+  resource pack or mod is required. Only IDs in `references/vanilla_sounds.md` are accepted.
+- The current curated palette includes villager ambience, parrot ambience, flint-and-steel use,
+  and fire ambience/extinguish. Import a sidecar with `midi_to_song.py --effects-json effects.json`
+  (a JSON list or an object with an `effects` list). Effect timing uses the same timeline as notes. WAV preview does
+  not reproduce these game sounds; verify their mix in Minecraft.
+
 ## Step 1: you must ask the user (all of these are required)
 
 1. **MC Java version** (e.g. 1.20.4 / 1.21.8 / 26.2) — it determines the available instruments, the directory name (`functions` vs `function`), the pack.mcmeta syntax, and whether `/tick rate` can be used.

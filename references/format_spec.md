@@ -1,5 +1,25 @@
 # lemon datapack specification (reverse-verified) and the song.json contract
 
+## Vanilla sound effects (optional)
+
+A score may contain a top-level `effects` array in addition to pitched `tracks`. Each effect is
+scheduled on the same timeline as note events and is emitted as a vanilla `playsound` command.
+Effects are not converted into MIDI pitches and do not alter the melody.
+
+```json
+{
+  "effects": [
+    {"t": 24, "sound": "entity.villager.ambient", "vol": 0.35, "pitch": 1.0, "category": "voice"},
+    {"t": 48, "sound": "item.flintandsteel.use", "vol": 0.55, "category": "player"}
+  ]
+}
+```
+
+The event ID must be present in `references/vanilla_sounds.md`; the namespace defaults to
+`minecraft`. The optional category defaults to `voice`, volume to `1.0`, and pitch to `1.0`.
+Multiple effects can share a tick with one another and with note-block notes. The validator checks
+the sound-event allowlist, target version, category, volume and pitch.
+
 ## A. Specification of the generated artifacts (file-by-file comparison with the reference pack lemon)
 Scoring conventions: fake player `music_progress`; objectives `music_type` (current song ID)/`nbs_s` (progress)/`nbs_t` (ticks already played);
 each tick `#speed nbs_s` is added to nbs_s. All times are in nbs_s units (= NBS tick × 20/tps × speed).

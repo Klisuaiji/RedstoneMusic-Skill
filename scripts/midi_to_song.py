@@ -77,8 +77,12 @@ def main():
     ap.add_argument("--vol", action="append", default=[], metavar="INST=VOL", help="override the default volume; repeatable")
     ap.add_argument("--drum-map", default="36=basedrum,38=snare,40=snare",
                     help="GM pitch→instrument; anything unlisted goes to hat (default 36=basedrum,38=snare,40=snare)")
-    ap.add_argument("--no-fold", action="store_true", help="do not fold octaves (leave it to generate.py to clamp and warn)")
+    ap.add_argument("--no-fold", action="store_true", help="do not fold octaves if no exact-pitch instrument is available")
+    ap.add_argument("--pitch-policy", choices=["preserve", "fold"], default="preserve",
+                    help="preserve original MIDI pitches by rerouting out-of-range notes to another vanilla instrument (default); fold = legacy octave folding")
     ap.add_argument("--force", action="store_true", help="proceed even if the #speed time resolution is unusable")
+    ap.add_argument("--effects-json", default=None,
+                    help="optional JSON list (or object with an effects list) of vanilla sound events to merge into song.json")
     ap.add_argument("--report", default=None, help="write the arrangement decision report as markdown")
     a = ap.parse_args()
 
@@ -144,12 +148,42 @@ def main():
     mapping_rows = []
     tick_src = {}                                   # t -> first MIDI tick landing on this t (for the spot-check table)
 
+    # When a note falls outside its initially selected note-block instrument, prefer a
+    # different vanilla instrument whose 25-semitone range contains the *original* MIDI pitch.
+    # This keeps the melody's absolute pitches intact across the full practical vanilla range.
+    PITCH_CANDIDATES = {
+        "lead": ("flute", "harp", "pling", "bit", "bell", "chime", "xylophone",
+                 "iron_xylophone", "banjo", "guitar", "bass", "didgeridoo",
+                 "trumpet", "trumpet_exposed", "trumpet_weathered", "trumpet_oxidized"),
+        "chord": ("harp", "guitar", "banjo", "bit", "pling", "flute", "bass",
+                  "didgeridoo", "bell", "chime", "xylophone", "iron_xylophone",
+                  "trumpet", "trumpet_exposed", "trumpet_weathered", "trumpet_oxidized"),
+        "bass": ("bass", "didgeridoo", "guitar", "harp", "banjo", "bit", "pling",
+                 "flute", "bell", "chime", "xylophone", "iron_xylophone",
+                 "trumpet", "trumpet_exposed", "trumpet_weathered", "trumpet_oxidized"),
+        "assigned": ("flute", "harp", "pling", "bit", "bell", "chime", "xylophone",
+                     "iron_xylophone", "banjo", "guitar", "bass", "didgeridoo",
+                     "trumpet", "trumpet_exposed", "trumpet_weathered", "trumpet_oxidized"),
+    }
     def add(midi_tick, inst, midi, vol, tag):
         t, g = to_t(midi_tick)
+        original_inst = inst
         base = INSTRUMENTS[inst]["base"]
         lo, hi = base, base + 24
         n = 0
-        if not a.no_fold:
+        is_pitched = inst not in ("basedrum", "snare", "hat") and inst not in HEADS
+        if a.pitch_policy == "preserve" and is_pitched and not (lo <= midi <= hi):
+            replacement = next((cand for cand in PITCH_CANDIDATES.get(tag, PITCH_CANDIDATES["assigned"])
+                                if cand in INSTRUMENTS
+                                and vtuple(a.mc_version) >= vtuple(INSTRUMENTS[cand]["min"])
+                                and INSTRUMENTS[cand]["base"] <= midi <= INSTRUMENTS[cand]["base"] + 24), None)
+            if replacement:
+                inst = replacement
+                lo = INSTRUMENTS[inst]["base"]
+                hi = lo + 24
+                stats["pitch_rerouted"] += 1
+                stats["rerouted_%s_to_%s" % (original_inst, inst)] += 1
+        if is_pitched and not (lo <= midi <= hi) and not a.no_fold:
             while midi > hi:
                 midi -= 12
                 n -= 1
@@ -276,6 +310,12 @@ def main():
         if notes:
             tracks.append({"name": inst if inst not in ("basedrum", "snare", "hat") else "drums_" + inst,
                            "include": True, "instrument_default": inst, "notes": notes})
+    effects = []
+    if a.effects_json:
+        loaded_effects = json.load(open(a.effects_json, encoding="utf-8"))
+        effects = loaded_effects.get("effects", []) if isinstance(loaded_effects, dict) else loaded_effects
+        if not isinstance(effects, list):
+            sys.exit("--effects-json must contain a JSON list or an object with an 'effects' list")
     song = {"meta": {
         "name": name, "namespace": a.namespace, "path": path, "song_id": a.song_id,
         "mc_version": a.mc_version, "style": a.style, "time_unit": "nbs_s_units",
@@ -283,7 +323,7 @@ def main():
         "_source": os.path.basename(a.midi),
         "_timeline": "t = game tick (1/%d s); host #speed nbs_s = %d; tree window 80*t" % (R, a.speed),
         "_tick_rate": R},
-        "tracks": tracks}
+        "tracks": tracks, "effects": effects}
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(song, f, ensure_ascii=False)
     total = sum(len(t["notes"]) for t in tracks)
@@ -299,7 +339,8 @@ def main():
     print("  quantization error: median %.1f ms / p90 %.1f ms / max %.1f ms"
           % (errs[len(errs) // 2], errs[int(len(errs) * 0.9)], errs[-1]))
     for k in sorted(stats):
-        print("    %-20s %d" % (k, stats[k]))
+        print("    %-28s %d" % (k, stats[k]))
+    print("  pitch policy: %s (out-of-range notes rerouted to preserve absolute MIDI pitch)" % a.pitch_policy if a.pitch_policy == "preserve" else "  pitch policy: legacy octave folding")
     if folds:
         print("  octave folding: %s (+1 = raised one octave to enter the instrument's range)"
               % ", ".join("%+d×%d" % (k, v) for k, v in sorted(folds.items())))
@@ -326,6 +367,8 @@ def main():
                         inst, why, vol, foldn))
         L.append("")
         L.append("## Output\n")
+        L.append("- Pitch policy: `%s`; notes rerouted to preserve exact MIDI pitch: %d" % (a.pitch_policy, stats["pitch_rerouted"]))
+        L.append("- Vanilla sound-effect events imported: %d" % len(effects))
         L.append("- Notes %d, note ticks %d, last tick %d (%.1f s), max %d playsound on one tick (limit 255)"
                  % (total, len(ticks), maxt, maxt / float(R), poly))
         L.append("- Dedupe key = (tick, instrument, pitch): chords of the same instrument on the same tick are **all kept**; duplicates dropped this run: %d"
