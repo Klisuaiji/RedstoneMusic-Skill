@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # song.json → lemon-style mcfunction (algorithm reverse-verified against the lemon reference pack)
-import json, os, sys, argparse
+import json, os, sys, argparse, math
 
 INSTRUMENTS = {
     "harp":            {"min": "1.13", "sound": "block.note_block.harp",               "base": 54},
@@ -18,21 +18,33 @@ INSTRUMENTS = {
     "didgeridoo":      {"min": "1.14", "sound": "block.note_block.didgeridoo",         "base": 30},
     "bit":             {"min": "1.14", "sound": "block.note_block.bit",                "base": 54},
     "banjo":           {"min": "1.14", "sound": "block.note_block.banjo",              "base": 54},
-    "pling":           {"min": "1.14", "sound": "block.note_block.pling",              "base": 54},
+    "pling":           {"min": "1.14", "sound": "block.note_block.pling",               "base": 54},
     "skeleton":        {"min": "1.20", "sound": "block.note_block.imitate.skeleton",        "base": 54},
     "wither_skeleton": {"min": "1.20", "sound": "block.note_block.imitate.wither_skeleton", "base": 54},
     "zombie":          {"min": "1.20", "sound": "block.note_block.imitate.zombie",          "base": 54},
     "creeper":         {"min": "1.20", "sound": "block.note_block.imitate.creeper",         "base": 54},
-    "piglin":          {"min": "1.20", "sound": "block.note_block.imitate.piglin",          "base": 54},
-    "dragon":          {"min": "1.20", "sound": "block.note_block.imitate.ender_dragon",    "base": 54},
-    "trumpet":         {"min": "26.1", "sound": "block.note_block.trumpet",           "base": 54},
-    "trumpet_exposed": {"min": "26.1", "sound": "block.note_block.trumpet_exposed",   "base": 54},
-    "trumpet_weathered":{"min": "26.1","sound": "block.note_block.trumpet_weathered", "base": 42},
-    "trumpet_oxidized":{"min": "26.1", "sound": "block.note_block.trumpet_oxidized",  "base": 42},
+    "piglin":          {"min": "1.20", "sound": "block.note_block.imitate.piglin",         "base": 54},
+    "dragon":          {"min": "1.20", "sound": "block.note_block.imitate.ender_dragon",   "base": 54},
+    "trumpet":         {"min": "26.1", "sound": "block.note_block.trumpet",                "base": 54},
+    "trumpet_exposed": {"min": "26.1", "sound": "block.note_block.trumpet_exposed",        "base": 54},
+    "trumpet_weathered":{"min": "26.1","sound": "block.note_block.trumpet_weathered",      "base": 42},
+    "trumpet_oxidized":{"min": "26.1", "sound": "block.note_block.trumpet_oxidized",       "base": 42},
 }
 HEADS = ("skeleton","wither_skeleton","zombie","creeper","piglin","dragon")
 
-def vt(v): return tuple(int(x) for x in v.split("."))
+# Curated vanilla sound events used as non-pitched musical accents. Keep in sync with
+# references/vanilla_sounds.md and validate_pack.py.
+SOUND_EFFECTS = {
+    "entity.villager.ambient": "1.13",
+    "entity.parrot.ambient": "1.13",
+    "item.flintandsteel.use": "1.13",
+    "block.fire.ambient": "1.13",
+    "block.fire.extinguish": "1.13",
+}
+SOUND_CATEGORIES = ("master", "music", "record", "weather", "block", "hostile",
+                    "neutral", "player", "ambient", "voice")
+
+def vt(v): return tuple(int(x) for x in str(v).split("."))
 def pitch_of(uc): return 2 ** ((uc - 12) / 12.0)
 
 def main():
@@ -50,13 +62,15 @@ def main():
     sid = m.get("song_id",1); tag = m.get("mute_tag","no_music")
     nxt = m.get("next_song"); ver = m.get("mc_version","1.21")
     unit = m.get("time_unit","nbs_ticks"); tps = m.get("tempo_tps",10)
-    scale = {"nbs_ticks": 20.0/tps*speed, "game_ticks": float(speed)}.get(unit, 1.0)
+    scale = {"nbs_ticks": 20.0/tps*speed, "game_ticks": float(speed),
+             "nbs_s_units": 1.0}.get(unit, 1.0)
 
+    # Each event: (sound id, pitch, volume, sound category, kind).
     events, warns = {}, []
-    for tr in song["tracks"]:
+    for tr in song.get("tracks", []):
         if tr.get("include", True) is False: continue
         dinst = tr.get("instrument_default","harp")
-        for n in tr["notes"]:
+        for n in tr.get("notes", []):
             raw = n["t"]*scale; t = round(raw)
             if abs(raw-t) > 1e-6:
                 sys.exit("time %s does not convert to a whole number (%s); adjust tempo/speed or quantize" % (n["t"], raw))
@@ -68,9 +82,32 @@ def main():
             if not 0 <= uc <= 24:
                 warns.append("t=%s %s out of pitch range (uc=%d), clamped" % (n["t"], inst, uc)); uc = min(24,max(0,uc))
             if inst in HEADS: warns.append("t=%s head instrument ignores pitch" % n["t"])
-            events.setdefault(t,[]).append((INSTRUMENTS[inst]["sound"], "%.6f"%pitch_of(uc), n.get("vol",1.0)))
-    if not events: sys.exit("no notes!")
+            events.setdefault(t,[]).append((INSTRUMENTS[inst]["sound"], "%.6f"%pitch_of(uc),
+                                            float(n.get("vol",1.0)), "voice", "note"))
 
+    for e in song.get("effects", []):
+        raw_t = e.get("t")
+        if not isinstance(raw_t, (int, float)) or not math.isfinite(raw_t) or raw_t < 0:
+            sys.exit("effect t must be a finite non-negative number: %r" % raw_t)
+        raw = raw_t * scale; t = round(raw)
+        if abs(raw-t) > 1e-6:
+            sys.exit("effect time %s does not convert to a whole number (%s); quantize it first" % (raw_t, raw))
+        sound = str(e.get("sound", "")).removeprefix("minecraft:")
+        if sound not in SOUND_EFFECTS:
+            sys.exit("unknown vanilla sound effect %r (see references/vanilla_sounds.md)" % sound)
+        if vt(ver) < vt(SOUND_EFFECTS[sound]):
+            sys.exit("sound effect %s needs MC %s+ (target %s)" % (sound, SOUND_EFFECTS[sound], ver))
+        category = e.get("category", "voice")
+        if category not in SOUND_CATEGORIES:
+            sys.exit("invalid sound category %r (allowed: %s)" % (category, ", ".join(SOUND_CATEGORIES)))
+        vol = float(e.get("vol", 1.0)); pitch = float(e.get("pitch", 1.0))
+        if not math.isfinite(vol) or not 0.0 <= vol <= 16.0:
+            sys.exit("effect volume must be in [0,16]: %r" % vol)
+        if not math.isfinite(pitch) or not 0.5 <= pitch <= 2.0:
+            sys.exit("effect pitch must be in [0.5,2.0]: %r" % pitch)
+        events.setdefault(t,[]).append((sound, "%.6f"%pitch, vol, category, "effect"))
+
+    if not events: sys.exit("no notes or sound effects!")
     ticks = sorted(events); maxt = ticks[-1]
     N = 1
     while N <= maxt: N *= 2
@@ -80,12 +117,8 @@ def main():
         rng = [t for t in ntset if x <= t <= y]
         if not rng: return None
         name = "%d_%d" % (x, y)
-        # A leaf must be 1 wide (y == x; see references/format_spec.md §A).
-        # With y-x<=1 a leaf only outputs rng[0]; the deepest leaf produced by the bisection is
-        # always an aligned [2k,2k+1], so when the adjacent tick pair (2k,2k+1) both have notes,
-        # notes/<t>.mcfunction for 2k+1 is generated but no node calls it → that note is silent
-        # forever (measured on one song: 79 of 1169 notes unreachable).
-        if y == x:  # leaf
+        # A leaf must be 1 wide: adjacent ticks must never be merged into one leaf.
+        if y == x:
             t = rng[0]; guard = "-1" if t == 0 else str(t-1)
             tree[name] = ("execute if score music_progress nbs_s matches %d..%d "
                           "if score music_progress nbs_t matches ..%s run function %s:%s/notes/%d"
@@ -104,8 +137,8 @@ def main():
     os.makedirs(os.path.join(a.out,"notes"), exist_ok=True)
     os.makedirs(os.path.join(a.out,"tree"), exist_ok=True)
     for t in ticks:
-        lines = ["execute as @a[tag=!%s] at @s run playsound minecraft:%s voice @s ^0 ^ ^ %g %s 1"
-                 % (tag, s, v, p) for (s,p,v) in events[t]]
+        lines = ["execute as @a[tag=!%s] at @s run playsound minecraft:%s %s @s ^0 ^ ^ %g %s 1"
+                 % (tag, s, category, v, p) for (s,p,v,category,kind) in events[t]]
         if t == maxt and m.get("auto_stop", True):
             lines.append("function %s:%s/stop" % (ns, path))
         else:
@@ -121,6 +154,9 @@ def main():
         w("_standalone_init.mcfunction", "scoreboard objectives add music_type dummy\nscoreboard objectives add nbs_s dummy\nscoreboard objectives add nbs_t dummy\nscoreboard players set #speed nbs_s %d\n" % speed)
         w("_standalone_tick.mcfunction", "function %s:%s/tick\n" % (ns, path))
     for x in warns: print("WARN:", x, file=sys.stderr)
-    print("OK: %d note ticks / %d tree nodes / root %s → %s" % (len(ticks), len(tree), root, a.out))
+    note_count = sum(1 for evs in events.values() for e in evs if e[4] == "note")
+    effect_count = sum(1 for evs in events.values() for e in evs if e[4] == "effect")
+    print("OK: %d event ticks / %d note events / %d vanilla effects / %d tree nodes / root %s → %s"
+          % (len(ticks), note_count, effect_count, len(tree), root, a.out))
 
 if __name__ == "__main__": main()
