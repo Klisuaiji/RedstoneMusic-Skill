@@ -92,7 +92,9 @@ def main():
         raw = raw_t * scale; t = round(raw)
         if abs(raw-t) > 1e-6:
             sys.exit("effect time %s does not convert to a whole number (%s); quantize it first" % (raw_t, raw))
-        sound = str(e.get("sound", "")).removeprefix("minecraft:")
+        sound = str(e.get("sound", ""))
+        if sound.startswith("minecraft:"):
+            sound = sound[len("minecraft:"): ]
         if sound not in SOUND_EFFECTS:
             sys.exit("unknown vanilla sound effect %r (see references/vanilla_sounds.md)" % sound)
         if vt(ver) < vt(SOUND_EFFECTS[sound]):
