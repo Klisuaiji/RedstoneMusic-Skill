@@ -315,7 +315,7 @@ def main():
         "_source": os.path.basename(a.midi),
         "_timeline": "t = game tick (1/%d s); host #speed nbs_s = %d; tree window 80*t" % (R, a.speed),
         "_tick_rate": R},
-        "tracks": tracks}
+        "tracks": tracks, "effects": []}
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(song, f, ensure_ascii=False)
     total = sum(len(t["notes"]) for t in tracks)
