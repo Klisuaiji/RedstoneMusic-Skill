@@ -81,6 +81,8 @@ def main():
     ap.add_argument("--pitch-policy", choices=["preserve", "fold"], default="preserve",
                     help="preserve original MIDI pitches by rerouting out-of-range notes to another vanilla instrument (default); fold = legacy octave folding")
     ap.add_argument("--force", action="store_true", help="proceed even if the #speed time resolution is unusable")
+    ap.add_argument("--effects-json", default=None,
+                    help="optional JSON list (or object with an effects list) of vanilla sound events to merge into song.json")
     ap.add_argument("--report", default=None, help="write the arrangement decision report as markdown")
     a = ap.parse_args()
 
@@ -308,6 +310,12 @@ def main():
         if notes:
             tracks.append({"name": inst if inst not in ("basedrum", "snare", "hat") else "drums_" + inst,
                            "include": True, "instrument_default": inst, "notes": notes})
+    effects = []
+    if a.effects_json:
+        loaded_effects = json.load(open(a.effects_json, encoding="utf-8"))
+        effects = loaded_effects.get("effects", []) if isinstance(loaded_effects, dict) else loaded_effects
+        if not isinstance(effects, list):
+            sys.exit("--effects-json must contain a JSON list or an object with an 'effects' list")
     song = {"meta": {
         "name": name, "namespace": a.namespace, "path": path, "song_id": a.song_id,
         "mc_version": a.mc_version, "style": a.style, "time_unit": "nbs_s_units",
@@ -315,7 +323,7 @@ def main():
         "_source": os.path.basename(a.midi),
         "_timeline": "t = game tick (1/%d s); host #speed nbs_s = %d; tree window 80*t" % (R, a.speed),
         "_tick_rate": R},
-        "tracks": tracks, "effects": []}
+        "tracks": tracks, "effects": effects}
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(song, f, ensure_ascii=False)
     total = sum(len(t["notes"]) for t in tracks)
