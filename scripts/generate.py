@@ -110,6 +110,9 @@ def main():
         events.setdefault(t,[]).append((sound, "%.6f"%pitch, vol, category, "effect"))
 
     if not events: sys.exit("no notes or sound effects!")
+    overloaded = [(t, len(items)) for t, items in events.items() if len(items) > 255]
+    if overloaded:
+        sys.exit("more than 255 playsound events on one tick (first: %s); reduce simultaneous notes/effects" % (overloaded[0],))
     ticks = sorted(events); maxt = ticks[-1]
     N = 1
     while N <= maxt: N *= 2
