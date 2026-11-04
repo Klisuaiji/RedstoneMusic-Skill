@@ -62,8 +62,8 @@ SOUND2INST = {
     "block.note_block.trumpet_oxidized": "trumpet_oxidized",
 }
 
-PS_RE = re.compile(r"execute as @a\[tag=!(\S+?)\] at @s run playsound minecraft:(\S+) voice @s "
-                   r"\^0 \^ \^ (\S+) (\S+) 1$")
+PS_RE = re.compile(r"execute as @a\\[tag=!(\\S+?)\\] at @s run playsound minecraft:(\\S+) (\\w+) @s "
+                   r"\\^0 \\^ \\^ (\\S+) (\\S+) 1$")
 LEAF_RE = re.compile(r"^execute if score music_progress nbs_s matches (\d+)\.\.(\d+) "
                      r"if score music_progress nbs_t matches \.\.(-?\d+) run function (\S+)/notes/(\d+)$")
 NODE_RE = re.compile(r"^execute if score music_progress nbs_s matches (\d+)\.\.(\d+) "
