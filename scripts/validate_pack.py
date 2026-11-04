@@ -31,6 +31,15 @@ INSTRUMENTS = {
     "trumpet_weathered": (42, "26.1"), "trumpet_oxidized": (42, "26.1"),
 }
 HEADS = ("skeleton", "wither_skeleton", "zombie", "creeper", "piglin", "dragon")
+SOUND_EFFECTS = {
+    "entity.villager.ambient": "1.13",
+    "entity.parrot.ambient": "1.13",
+    "item.flintandsteel.use": "1.13",
+    "block.fire.ambient": "1.13",
+    "block.fire.extinguish": "1.13",
+}
+SOUND_CATEGORIES = ("master", "music", "record", "weather", "block", "hostile",
+                    "neutral", "player", "ambient", "voice")
 # sound event name -> instrument
 SOUND2INST = {
     "block.note_block.harp": "harp", "block.note_block.bass": "bass",
@@ -189,6 +198,7 @@ def main():
     vols = collections.defaultdict(set)
     spans = collections.defaultdict(lambda: [99, -1])
     nlines = 0
+    effect_lines = 0
     for t in notes:
         for ln in read_text(os.path.join(notes_dir, "%d.mcfunction" % t)).split("\r\n"):
             if not ln.strip() or ln.startswith("scoreboard") or ln.startswith("function"):
@@ -198,10 +208,22 @@ def main():
                 fail.append("notes/%d has an unexpected line: %s" % (t, ln))
                 continue
             nlines += 1
-            ev, vol, pitch = m.group(2), float(m.group(3)), float(m.group(4))
+            ev, category = m.group(2), m.group(3)
+            vol, pitch = float(m.group(4)), float(m.group(5))
+            if category not in SOUND_CATEGORIES:
+                fail.append("notes/%d uses an invalid sound category: %s" % (t, category))
+                continue
             inst = SOUND2INST.get(ev)
             if inst is None:
-                fail.append("notes/%d uses a sound effect outside the whitelist: %s" % (t, ev))
+                if ev not in SOUND_EFFECTS:
+                    fail.append("notes/%d uses a sound outside the note/effect whitelist: %s" % (t, ev))
+                    continue
+                if a.mc_version and vtuple(a.mc_version) < vtuple(SOUND_EFFECTS[ev]):
+                    fail.append("notes/%d: sound effect %s needs MC %s+ (target %s)" %
+                                (t, ev, SOUND_EFFECTS[ev], a.mc_version))
+                if not 0.0 <= vol <= 16.0 or not 0.5 <= pitch <= 2.0:
+                    fail.append("notes/%d has invalid effect volume/pitch: %s %s" % (t, vol, pitch))
+                effect_lines += 1
                 continue
             if a.mc_version and vtuple(a.mc_version) < vtuple(INSTRUMENTS[inst][1]):
                 fail.append("notes/%d: %s needs MC %s+ (target %s)" % (t, inst, INSTRUMENTS[inst][1], a.mc_version))
@@ -334,8 +356,8 @@ def main():
         sim_note = "every tick fires exactly once" if not once else "abnormal"
 
     # ---- report
-    print("notes: %d   tree nodes: %d   reachable: %d   playsound lines: %d"
-          % (len(notes), len(trees), len(reachable), nlines))
+    print("notes: %d   tree nodes: %d   reachable: %d   playsound lines: %d (vanilla effects: %d)"
+          % (len(notes), len(trees), len(reachable), nlines, effect_lines))
     print("tick range: %d..%d  duration %.1fs   #speed=%d" % (notes[0], notes[-1], notes[-1] / 20.0, a.speed))
     print("volume per instrument: %s" % {k: sorted(v) for k, v in sorted(vols.items())})
     print("use-count range per instrument: %s"
