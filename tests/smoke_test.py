@@ -48,6 +48,10 @@ def make_song(path, name="demo", song_id=7):
                      "song_id": song_id, "mc_version": "26.2", "style": "standalone",
                      "time_unit": "nbs_s_units", "speed": 80, "auto_stop": True,
                      "next_song": None, "mute_tag": "no_music"},
+            "effects": [
+                {"t": 3, "sound": "entity.villager.ambient", "vol": 0.35, "category": "voice"},
+                {"t": 7, "sound": "entity.parrot.ambient", "vol": 0.4, "pitch": 1.1, "category": "ambient"},
+                {"t": 10, "sound": "item.flintandsteel.use", "vol": 0.55, "category": "player"}],
             "tracks": [
                 {"name": "lead", "include": True, "instrument_default": "harp", "notes": [
                     {"t": 0, "midi": 66}, {"t": 1, "midi": 68}, {"t": 2, "midi": 69},
@@ -97,6 +101,13 @@ def main():
         song_dir = os.path.join(out, "music", "demo")
         check("both notes/ and tree/ are generated",
               os.path.isdir(os.path.join(song_dir, "notes")) and os.path.isdir(os.path.join(song_dir, "tree")))
+        generated_lines = "\\n".join(open(os.path.join(song_dir, "notes", fn), encoding="utf-8").read()
+                                       for fn in os.listdir(os.path.join(song_dir, "notes")))
+        check("vanilla villager/parrot/flint sounds are emitted as playsound events",
+              all(x in generated_lines for x in ("entity.villager.ambient", "entity.parrot.ambient",
+                                                  "item.flintandsteel.use")))
+        check("sound-effect commands use their own vanilla sound categories",
+              "ambient @s" in generated_lines and "player @s" in generated_lines)
 
         notes = sorted(int(f[:-11]) for f in os.listdir(os.path.join(song_dir, "notes")))
         ref = tree_refs(song_dir)
@@ -108,6 +119,8 @@ def main():
                          "--namespace", "minecraft", "--song", "demo", "--song-id", "7", "--speed", "80",
                          "--mc-version", "26.2"])
         check("validate_pack.py passes all checks", code == 0, log.strip()[-300:])
+        check("validator recognizes vanilla effects separately from pitched instruments",
+              code == 0 and "vanilla effects: 3" in log, log.strip()[-300:])
         check("validation ran the tree state-machine simulation",
               "state-machine" in log or "ALL CHECKS PASSED" in log)
 
