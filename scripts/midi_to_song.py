@@ -367,6 +367,8 @@ def main():
                         inst, why, vol, foldn))
         L.append("")
         L.append("## Output\n")
+        L.append("- Pitch policy: `%s`; notes rerouted to preserve exact MIDI pitch: %d" % (a.pitch_policy, stats["pitch_rerouted"]))
+        L.append("- Vanilla sound-effect events imported: %d" % len(effects))
         L.append("- Notes %d, note ticks %d, last tick %d (%.1f s), max %d playsound on one tick (limit 255)"
                  % (total, len(ticks), maxt, maxt / float(R), poly))
         L.append("- Dedupe key = (tick, instrument, pitch): chords of the same instrument on the same tick are **all kept**; duplicates dropped this run: %d"
