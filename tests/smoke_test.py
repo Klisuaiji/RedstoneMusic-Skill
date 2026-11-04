@@ -80,10 +80,10 @@ def write_pitch_test_midi(path):
         return bytes(out)
 
     name = b"Lead"
-    track = bytearray(b"\\x00\\xff\\x03" + vlq(len(name)) + name)
-    track.extend(b"\\x00\\x90\\x5a\\x64")
-    track.extend(vlq(480) + b"\\x80\\x5a\\x00")
-    track.extend(b"\\x00\\xff\\x2f\\x00")
+    track = bytearray(b"\x00\xff\x03" + vlq(len(name)) + name)
+    track.extend(b"\x00\x90\x5a\x64")
+    track.extend(vlq(480) + b"\x80\x5a\x00")
+    track.extend(b"\x00\xff\x2f\x00")
     header = b"MThd" + struct.pack(">IHHH", 6, 0, 1, 480)
     with open(path, "wb") as f:
         f.write(header + b"MTrk" + struct.pack(">I", len(track)) + track)
