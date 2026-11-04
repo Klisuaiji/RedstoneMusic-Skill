@@ -86,7 +86,8 @@ No Python environment: assemble it by hand following `templates/`; the rules are
   are separate from MIDI note tracks and are played with ordinary `/playsound` commands. No
   resource pack or mod is required. Only IDs in `references/vanilla_sounds.md` are accepted.
 - The current curated palette includes villager ambience, parrot ambience, flint-and-steel use,
-  and fire ambience/extinguish. Import a sidecar with `midi_to_song.py --effects-json effects.json`\n  (a JSON list or an object with an `effects` list). Effect timing uses the same timeline as notes. WAV preview does
+  and fire ambience/extinguish. Import a sidecar with `midi_to_song.py --effects-json effects.json`
+  (a JSON list or an object with an `effects` list). Effect timing uses the same timeline as notes. WAV preview does
   not reproduce these game sounds; verify their mix in Minecraft.
 
 ## Step 1: you must ask the user (all of these are required)
