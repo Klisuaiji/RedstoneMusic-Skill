@@ -57,7 +57,8 @@ Sound effects are separate from pitched note tracks:
   but does not turn the effect into a pitched instrument.
 - `category` defaults to `voice`; supported values are `master`, `music`, `record`,
   `weather`, `block`, `hostile`, `neutral`, `player`, `ambient`, and `voice`.
-- Multiple effects may occur on the same tick, including alongside note-block notes.\n- To import a separate event file during MIDI conversion, use `midi_to_song.py ... --effects-json effects.json`; the file may be a JSON list or an object containing an `effects` list.
+- Multiple effects may occur on the same tick, including alongside note-block notes.
+- To import a separate event file during MIDI conversion, use `midi_to_song.py ... --effects-json effects.json`; the file may be a JSON list or an object containing an `effects` list.
 
 ## Arrangement guidance
 
