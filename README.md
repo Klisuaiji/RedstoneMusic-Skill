@@ -176,7 +176,7 @@ pitched instrument covers that note. Use `--pitch-policy fold` for the legacy be
 You can also add non-pitched vanilla sounds through the top-level `effects` array in `song.json`.
 The curated initial palette includes villager ambience, parrot ambience, flint-and-steel ignition,
 and fire ambience/extinguish. These use ordinary `/playsound` calls: **no resource pack or mod**.
-See [`references/vanilla_sounds.md`](references/vanilla_sounds.md) for IDs and schema. The WAV
+Use `midi_to_song.py ... --effects-json effects.json` to merge a separate effect-event list into the generated score. See [`references/vanilla_sounds.md`](references/vanilla_sounds.md) for IDs and schema. The WAV
 preview does not synthesize these effects; the final sound balance must be checked in Minecraft.
 
 ## Timeline convention (important)
