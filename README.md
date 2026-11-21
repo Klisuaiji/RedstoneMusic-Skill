@@ -166,6 +166,19 @@ examples/
   RedstoneMusicBox-v3.zip      # companion finished product: Redstone Music Box v3 (12 songs + player)
 ```
 
+## Melody preservation and vanilla sound effects
+
+`midi_to_song.py` now defaults to `--pitch-policy preserve`: when a note is outside the selected
+instrument's range, it first reroutes that note to another vanilla note-block instrument that can
+play the **exact original MIDI pitch**. Octave folding remains a fallback only when no vanilla
+pitched instrument covers that note. Use `--pitch-policy fold` for the legacy behavior.
+
+You can also add non-pitched vanilla sounds through the top-level `effects` array in `song.json`.
+The curated initial palette includes villager ambience, parrot ambience, flint-and-steel ignition,
+and fire ambience/extinguish. These use ordinary `/playsound` calls: **no resource pack or mod**.
+Use `midi_to_song.py ... --effects-json effects.json` to merge a separate effect-event list into the generated score. See [`references/vanilla_sounds.md`](references/vanilla_sounds.md) for IDs and schema. The WAV
+preview does not synthesize these effects; the final sound balance must be checked in Minecraft.
+
 ## Timeline convention (important)
 
 A lemon-family host executes `nbs_s += #speed` every tick, and the tree window is `80×tick`.
@@ -179,5 +192,5 @@ quantization error shrinks 4×. The cost is that the whole world speeds up, it r
 ## Notes
 
 - This repository is for learning and exchange; the tracks it contains are conversions by the respective redstone music community, and the copyright belongs to the original composers
-- The generated music uses note block synthesized timbres and cannot and will not replicate the original song's timbre
+- The generated music uses note block synthesized timbres and optional vanilla `/playsound` effects; it cannot and will not replicate the original song's timbre
 - Bedrock Edition is not supported

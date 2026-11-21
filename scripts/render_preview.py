@@ -68,6 +68,7 @@ def main():
             swap[k.strip()] = v.strip()
 
     # collect notes: t → game tick (same conversion as generate.py: T = round(t*scale), fires at game tick 80T/speed)
+    effects = song.get("effects", [])
     events = []
     for tr in song.get("tracks", []):
         if tr.get("include", True) is False:
@@ -152,6 +153,9 @@ def main():
           % (t1 - t0, rate, used, len(events)))
     print("  peak %.2f (normalized to %.2f) / RMS %.4f / file %.2f MB"
           % (peak * k, a.gain, rms, os.path.getsize(a.out) / 1e6))
+    if effects:
+        print("  note: %d vanilla sound effects were not synthesized in this WAV preview; check them in Minecraft"
+              % len(effects))
     if a.slice:
         print("  ⚠ rendered only the slice %.1fs–%.1fs; drop --slice for the full preview" % (t0, t1))
 

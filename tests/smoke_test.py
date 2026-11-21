@@ -14,7 +14,7 @@ Covers:
   4. when pack.mcmeta is written the wrong way validate_pack.py must fail (writing only
      pack_format for 26.2 is wrong)
 """
-import json, os, re, shutil, subprocess, sys, uuid, zipfile
+import json, os, re, shutil, subprocess, sys, uuid, zipfile, struct
 
 try:            # when the console is GBK, non-GBK characters degrade to ?, so the test must not crash on print
     sys.stdout.reconfigure(errors="replace")
@@ -48,6 +48,10 @@ def make_song(path, name="demo", song_id=7):
                      "song_id": song_id, "mc_version": "26.2", "style": "standalone",
                      "time_unit": "nbs_s_units", "speed": 80, "auto_stop": True,
                      "next_song": None, "mute_tag": "no_music"},
+            "effects": [
+                {"t": 3, "sound": "entity.villager.ambient", "vol": 0.35, "category": "voice"},
+                {"t": 7, "sound": "entity.parrot.ambient", "vol": 0.4, "pitch": 1.1, "category": "ambient"},
+                {"t": 10, "sound": "item.flintandsteel.use", "vol": 0.55, "category": "player"}],
             "tracks": [
                 {"name": "lead", "include": True, "instrument_default": "harp", "notes": [
                     {"t": 0, "midi": 66}, {"t": 1, "midi": 68}, {"t": 2, "midi": 69},
@@ -62,6 +66,27 @@ def make_song(path, name="demo", song_id=7):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(song, f, ensure_ascii=False)
     return song
+
+
+
+def write_pitch_test_midi(path):
+    """One MIDI 90 note: harp cannot play it, flute can play it without octave folding."""
+    def vlq(value):
+        out = [value & 0x7F]
+        value >>= 7
+        while value:
+            out.insert(0, (value & 0x7F) | 0x80)
+            value >>= 7
+        return bytes(out)
+
+    name = b"Lead"
+    track = bytearray(b"\x00\xff\x03" + vlq(len(name)) + name)
+    track.extend(b"\x00\x90\x5a\x64")
+    track.extend(vlq(480) + b"\x80\x5a\x00")
+    track.extend(b"\x00\xff\x2f\x00")
+    header = b"MThd" + struct.pack(">IHHH", 6, 0, 1, 480)
+    with open(path, "wb") as f:
+        f.write(header + b"MTrk" + struct.pack(">I", len(track)) + track)
 
 
 def tree_refs(song_dir):
@@ -97,6 +122,13 @@ def main():
         song_dir = os.path.join(out, "music", "demo")
         check("both notes/ and tree/ are generated",
               os.path.isdir(os.path.join(song_dir, "notes")) and os.path.isdir(os.path.join(song_dir, "tree")))
+        generated_lines = "\\n".join(open(os.path.join(song_dir, "notes", fn), encoding="utf-8").read()
+                                       for fn in os.listdir(os.path.join(song_dir, "notes")))
+        check("vanilla villager/parrot/flint sounds are emitted as playsound events",
+              all(x in generated_lines for x in ("entity.villager.ambient", "entity.parrot.ambient",
+                                                  "item.flintandsteel.use")))
+        check("sound-effect commands use their own vanilla sound categories",
+              "ambient @s" in generated_lines and "player @s" in generated_lines)
 
         notes = sorted(int(f[:-11]) for f in os.listdir(os.path.join(song_dir, "notes")))
         ref = tree_refs(song_dir)
@@ -108,6 +140,8 @@ def main():
                          "--namespace", "minecraft", "--song", "demo", "--song-id", "7", "--speed", "80",
                          "--mc-version", "26.2"])
         check("validate_pack.py passes all checks", code == 0, log.strip()[-300:])
+        check("validator recognizes vanilla effects separately from pitched instruments",
+              code == 0 and "vanilla effects: 3" in log, log.strip()[-300:])
         check("validation ran the tree state-machine simulation",
               "state-machine" in log or "ALL CHECKS PASSED" in log)
 
@@ -211,6 +245,24 @@ def main():
             code, log = run([PY, os.path.join(S, "midi_to_song.py"), mid, "-o", os.path.join(tmp, "tr80.json"),
                              "--name", "demo", "--song-id", "8", "--tick-rate", "80"])
             check("--tick-rate 80 works (grid 12.5ms)", code == 0 and "12.50 ms" in log, log.strip()[-200:])
+
+
+        # ---------- 5b. pitch preservation across instrument ranges ----------
+        print("\\n[5b] preserve exact MIDI pitch when the selected instrument cannot reach it")
+        pitch_mid = os.path.join(tmp, "pitch90.mid")
+        pitch_song = os.path.join(tmp, "pitch90.song.json")
+        write_pitch_test_midi(pitch_mid)
+        code, log = run([PY, os.path.join(S, "midi_to_song.py"), pitch_mid, "-o", pitch_song,
+                         "--name", "pitch90", "--song-id", "9", "--mc-version", "26.2",
+                         "--lead-inst", "harp"])
+        check("midi_to_song reroutes out-of-range pitch instead of folding its octave",
+              code == 0 and "pitch_rerouted" in log, log.strip()[-250:])
+        if code == 0:
+            pitch_data = json.load(open(pitch_song, encoding="utf-8"))
+            found = [(tr.get("instrument_default"), n["midi"])
+                     for tr in pitch_data["tracks"] for n in tr["notes"] if n["midi"] == 90]
+            check("MIDI 90 remains MIDI 90 and is routed to flute",
+                  ("flute", 90) in found, str(found))
 
         # ---------- 6. music box: register a song → static checks ----------
         print("\n[6] music box (generic framework + registered song)")
